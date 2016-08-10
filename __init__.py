@@ -90,5 +90,3 @@ def get_BLACS_worker(name):
 
 def get_runviewer_parser(name):
     return runviewer_parser[name]
-
-
