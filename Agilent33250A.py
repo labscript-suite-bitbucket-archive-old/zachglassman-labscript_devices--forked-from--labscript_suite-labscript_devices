@@ -6,6 +6,7 @@ import numpy as np
 class Agilent33250A(IntermediateDevice):
     allowed_children=[AnalogOut]
     description = "Agilent33250A function generator"
+    n_analogs = 1
 
     @set_passed_properties(property_names = {"connection_table_properties":["com_port",'p','b','a','r']})
     def __init__(self, name, parent_device, com_port):
@@ -31,7 +32,7 @@ class Agilent33250A(IntermediateDevice):
             dev.expand_timeseries()
             data_array = np.zeros(1)
             grp = hdf5_file.create_group('/devices/' + self.name)
-            gp.create_dataset('static_values', data = data_array)
+            grp.create_dataset('static_values', data = data_array)
 
 
 import time
@@ -69,7 +70,9 @@ class Agilent33250ATab(DeviceTab):
         self.supports_smart_programming(False)
 
     def initialise_workers(self):
-        self.create_worker("main_worker", Agilent33250AWorker, {"com_port": self.com_port})
+        self.create_worker("main_worker",
+                           Agilent33250AWorker,
+                           {"com_port": self.com_port})
         self.primary_worker = 'main_worker'
 
 
@@ -102,7 +105,15 @@ class Agilent33250AWorker(Worker):
 
 
     def transition_to_buffered(self,device_name,h5file,initial_values,fresh):
-        print "transitionsing"
+        #only update if value is different than last value
+        with h5py.File(h5file,'r') as hdf5_file:
+            group = hdf5_file['globals/']['Beatnote']
+            freq = group.attrs['Freq']
+            if freq != initial_values['beat_freq']:
+                values = {'beat_freq': freq}
+                self.program_manual(values)
+        print('transing')
+
 
     def transition_to_manual(self):
         return True
