@@ -2,7 +2,7 @@ from labscript_devices import labscript_device, BLACS_tab, BLACS_worker
 from labscript import IntermediateDevice,AnalogOut,StaticAnalogQuantity, Device, LabscriptError, set_passed_properties
 import numpy as np
 
-
+@labscript_device
 class Agilent33250A(IntermediateDevice):
     allowed_children=[AnalogOut]
     description = "Agilent33250A function generator"
@@ -22,17 +22,9 @@ class Agilent33250A(IntermediateDevice):
         Device.add_device(self, device)
 
     def generate_code(self, hdf5_file):
-        data_dict = {}
-        if len(self.child_devices) > 0:
-            raise LabscriptError("only one device support")
-
-        for dev in self.child_devices:
-            ignore = dev.get_change_times()
-            dev.make_timeseries([])
-            dev.expand_timeseries()
-            data_array = np.zeros(1)
-            grp = hdf5_file.create_group('/devices/' + self.name)
-            grp.create_dataset('static_values', data = data_array)
+        data_array = np.zeros(1)
+        grp = self.init_device_group(hdf5_file)
+        grp.create_dataset('static_values', data = data_array)
 
 
 import time
@@ -107,12 +99,14 @@ class Agilent33250AWorker(Worker):
     def transition_to_buffered(self,device_name,h5file,initial_values,fresh):
         #only update if value is different than last value
         with h5py.File(h5file,'r') as hdf5_file:
-            group = hdf5_file['globals/']['Beatnote']
-            freq = group.attrs['Freq']
-            if freq != initial_values['beat_freq']:
-                values = {'beat_freq': freq}
-                self.program_manual(values)
-        print('transing')
+            group = hdf5_file['globals'].attrs
+            freq = float(group['beatnote_freq'])
+        if freq != initial_values['beat_freq']:
+            values = {'beat_freq': freq}
+            self.program_manual(values)
+            return values
+        else:
+            return initial_values
 
 
     def transition_to_manual(self):

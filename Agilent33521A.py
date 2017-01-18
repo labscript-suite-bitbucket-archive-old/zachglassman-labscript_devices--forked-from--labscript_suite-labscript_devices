@@ -1,32 +1,31 @@
 from labscript_devices import labscript_device, BLACS_tab, BLACS_worker
-from labscript import IntermediateDevice,AnalogOut,StaticAnalogQuantity, Device, LabscriptError, set_passed_properties
+from labscript import TriggerableDevice, LabscriptError, set_passed_properties
 import numpy as np
 
-
-class Agilent33521A(IntermediateDevice):
+@labscript_device
+class Agilent33521A(TriggerableDevice):
     allowed_children=[]
-    description = "Agilent33521A function generator"
+    description = "Agilent33521A arbitrary function generator"
 
-    @set_passed_properties(property_names = {"connection_table_properties":["com_port",'p','b','a','r']})
-    def __init__(self, name, parent_device, com_port):
-        IntermediateDevice.__init__(self, name, parent_device)
+    @set_passed_properties(
+        property_names = {
+            "connection_table_properties":["com_port"]})
+    def __init__(self, name, parent_device,connection, com_port, **kwargs):
         self.BLACS_connection = com_port
+        TriggerableDevice.__init__(self, name, parent_device,connection, **kwargs)
 
-    def add_device(self, device):
-        Device.add_device(self, device)
+
+    def trigger(self, t, duration):
+        self.trigger_device.trigger(t, duration)
 
     def generate_code(self, hdf5_file):
-        data_dict = {}
-        if len(self.child_devices) > 0:
-            raise LabscriptError("only one device support")
-
-        for dev in self.child_devices:
-            ignore = dev.get_change_times()
-            dev.make_timeseries([])
-            dev.expand_timeseries()
-            data_array = np.zeros(1)
-            grp = hdf5_file.create_group('/devices/' + self.name)
-            gp.create_dataset('static_values', data = data_array)
+        """just need to save the parameters of interest
+        Here are there are no parameters that actually matter
+        since all parameters are passed from runmanager
+        we will just create a snippet for now"""
+        data_array = np.zeros(1)
+        grp = self.init_device_group(hdf5_file)
+        grp.create_dataset('static_values', data = data_array)
 
 
 import time
@@ -64,6 +63,112 @@ class ExpRamp(RampFunction):
     def __repr__(self):
         return 'amp*exp(-t/tau) + off'
 
+def exp_ramp(t,
+             initial_value,
+             ramp_up_time,
+             exp_init_value,
+             first_t_c,
+             second_ramp_amp_frac,
+             second_t_c,
+             time_to_final,
+             final_value,
+             ramp_start,
+             ramp_value,
+             ramp_dur,
+             final_extent):
+    # get amplitudes for ramps
+    first_exp = np.exp(-time_to_final / first_t_c)
+    second_exp = np.exp(-time_to_final / second_t_c)
+    a = first_exp + second_exp * \
+        second_ramp_amp_frac / (1 - second_ramp_amp_frac)
+    b = 1 / (1 - second_ramp_amp_frac) - a
+    amp_first_ramp = (exp_init_value - final_value) / \
+        b  # amplitude of first ramp
+    amp_sec_ramp = amp_first_ramp * \
+        second_ramp_amp_frac / (1 - second_ramp_amp_frac)
+    first_ramp = amp_first_ramp * np.exp(-t / first_t_c)
+    second_ramp = amp_sec_ramp * np.exp(-t / second_t_c)
+    return first_ramp + second_ramp + exp_init_value - amp_first_ramp - amp_sec_ramp
+
+
+def ramp_func(t,
+              initial_value,
+              ramp_up_time,
+              exp_init_value,
+              first_t_c,
+              second_ramp_amp_frac,
+              second_t_c,
+              time_to_final,
+              final_value,
+              ramp_start,
+              ramp_value,
+              ramp_dur,
+              final_extent):
+    # first ramp up
+    ramp_up = np.linspace(initial_value, exp_init_value, 10)  # + np.linspace()
+    ramp_up_t = np.linspace(0, ramp_up_time, 10)
+    # now do the exponential ramp from ramp_up_time to ramp_start
+    tf = ramp_start
+    ramp_t = np.linspace(ramp_up_time, ramp_start, 10000)
+    ramp = exp_ramp(ramp_t - ramp_up_time, initial_value,
+                    ramp_up_time,
+                    exp_init_value,
+                    first_t_c,
+                    second_ramp_amp_frac,
+                    second_t_c,
+                    time_to_final,
+                    final_value,
+                    ramp_start,
+                    ramp_value,
+                    ramp_dur,
+                    final_extent)
+    final_ramp = np.linspace(final_value, ramp_value, 1000)
+    final_ramp_t = np.linspace(ramp_start, ramp_start + ramp_dur, 1000)
+    # now stack answers
+    ans = np.hstack((ramp_up, ramp, final_ramp, np.zeros(10) + ramp_value))
+    t_ans = np.hstack((ramp_up_t, ramp_t,
+                       final_ramp_t,
+                       np.linspace(ramp_start + ramp_dur, np.max(t), 10)))
+    return np.interp(t, t_ans, ans)
+
+class OldRamp(RampFunction):
+    def func(self,
+            t,
+            initial_value,
+            ramp_up_time,
+            exp_init_value,
+            first_t_c,
+            second_ramp_amp_frac,
+            second_t_c,
+            time_to_final,
+            final_value,
+            ramp_start,
+            ramp_value,
+            ramp_dur,
+            final_extent):
+        try:
+            return ramp_func(t,
+                initial_value,
+                ramp_up_time,
+                exp_init_value,
+                first_t_c,
+                second_ramp_amp_frac,
+                second_t_c,
+                time_to_final,
+                final_value,
+                ramp_start,
+                ramp_value,
+                ramp_dur,
+                final_extent )
+        except:
+            return np.zeros(t.shape)
+
+    def __repr__(self):
+        _str = """
+        1. Linear ramp from
+        """
+        return _str
+
 @BLACS_tab
 class Agilent33521ATab(DeviceTab):
     def initialise_GUI(self):
@@ -73,7 +178,7 @@ class Agilent33521ATab(DeviceTab):
         self.base_max = 5
         self.base_decimals = 2
         self.device = self.settings['connection_table'].find_by_name(self.device_name)
-        self.ramp = ExpRamp()
+        self.ramp = OldRamp()
         ao_prop = {}
         for i in self.ramp.func_names():
             ao_prop[i] = {'base_unit':self.base_units,
@@ -91,7 +196,7 @@ class Agilent33521ATab(DeviceTab):
         self.com_port = str(self.settings['connection_table'].find_by_name(self.device_name).BLACS_connection)
 
         self.supports_remote_value_check(False)
-        self.supports_smart_programming(False)
+        self.supports_smart_programming(True)
 
     def _update_plot(self):
         self.plot_widget.clear()
@@ -100,15 +205,23 @@ class Agilent33521ATab(DeviceTab):
         self.plot_widget.plot(x=self._x,y=self._y)
 
     def create_plot_widget(self):
-        self._x = np.linspace(0,5,1000)
+        self._x = np.linspace(0,10,1000)
         self.plot_widget = pg.PlotWidget()
         self._update_plot()
         button = QPushButton('Plot')
+        button1 = QPushButton('Update')
         text = QLabel(str(self.ramp))
-        self.get_tab_layout().addWidget(text)
         self.get_tab_layout().addWidget(button)
+        self.get_tab_layout().addWidget(button1)
         button.clicked.connect(self._update_plot)
+        button1.clicked.connect(self._program_manual_button)
         self.get_tab_layout().addWidget(self.plot_widget)
+        self.get_tab_layout().addWidget(text)
+
+    @define_state(MODE_MANUAL,True,delete_stale_states=True)
+    def _program_manual_button(self, *args):
+        self._update_plot()
+        results = yield(self.queue_work(self._primary_worker,'program_manual_button',self._last_programmed_values))
 
     def initialise_workers(self):
         self.create_worker("main_worker", Agilent33521AWorker, {"com_port": self.com_port})
@@ -125,17 +238,53 @@ class Agilent33521AWorker(Worker):
 
         self.rm = visa.ResourceManager()
         self.inst = self.rm.open_resource(self.com_port)
+        self.ramp = OldRamp()
+        inst_params = self.inst.query(u'*LRN?').split(';')
+        #now make into nested dictionary
+        params = {}
+        for i in inst_params:
+            key, value = i.split()
+            try:
+                params[key] = float(value)
+            except:
+                params[key] = value
+        self._srat = params[u':SOUR1:FUNC:ARB:SRAT']
+
+    def _program_waveform(self, values):
+        n_samps = values['final_extent'] * self._srat
+        t = np.linspace(0, values['final_extent'], n_samps)
+        ramp = self.ramp.func(t, **values)
+        min_ramp = np.min(ramp)
+        max_ramp = np.max(ramp)
+        vpp = 1
+        ramp = (vpp)/(max_ramp-min_ramp)*(ramp - max_ramp) + vpp
+        ramp = ramp/vpp
+        self.inst.write(u'VOLT {:.3f}'.format(max_ramp))
+        #write out waveform
+        data_string = ''.join(',' + '{:.3f}'.format(i) for i in ramp)
+        self.inst.write(u'DATA:VOL:CLEAR')
+        self.inst.write(u'DATA:ARB DIP' + data_string)
+        self.inst.write(u'FUNC:ARB DIP')
+
+    def program_manual_button(self, values):
+        self._program_waveform(values)
 
     def check_remote_values(self):
         return self.inst.query(u'*LRN?').split(';')
 
     def program_manual(self, values):
-        pass
-
+        print("nothing to do here")
 
     def transition_to_buffered(self,device_name,h5file,initial_values,fresh):
-        print "transitionsing"
-        #pull values for h5file, compute and 
+        """get values from file and reprogram device
+        if not same as initial values """
+        with h5py.File(h5file, 'r') as f:
+            attrs = dict(f['globals'].attrs)
+        values = {k:float(v) for k,v in attrs.iteritems() if k in initial_values.keys()}
+        if values != initial_values or fresh:
+            self._program_waveform(values)
+
+        return values
 
     def transition_to_manual(self):
         return True
