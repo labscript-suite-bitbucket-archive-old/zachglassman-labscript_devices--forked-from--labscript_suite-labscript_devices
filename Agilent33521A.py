@@ -175,8 +175,8 @@ class Agilent33521ATab(DeviceTab):
         self.base_units = 'V'
         self.base_min = -5
         self.base_step = 0.01
-        self.base_max = 5
-        self.base_decimals = 2
+        self.base_max = 12
+        self.base_decimals = 3
         self.device = self.settings['connection_table'].find_by_name(self.device_name)
         self.ramp = OldRamp()
         ao_prop = {}
