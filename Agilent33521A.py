@@ -256,15 +256,16 @@ class Agilent33521AWorker(Worker):
         ramp = self.ramp.func(t, **values)
         min_ramp = np.min(ramp)
         max_ramp = np.max(ramp)
-        vpp = 1
-        ramp = (vpp)/(max_ramp-min_ramp)*(ramp - max_ramp) + vpp
-        ramp = ramp/vpp
-        self.inst.write(u'VOLT {:.3f}'.format(max_ramp))
+        scale =1/2*(max_ramp - min_ramp)
+        off = (min_ramp + scale)/2
+        self.inst.write(u'VOLT {:.3f}'.format(scale))
+        self.inst.write(u'OFF {:.3f}'.format(off))
         #write out waveform
         data_string = ''.join(',' + '{:.3f}'.format(i) for i in ramp)
         self.inst.write(u'DATA:VOL:CLEAR')
         self.inst.write(u'DATA:ARB DIP' + data_string)
         self.inst.write(u'FUNC:ARB DIP')
+        #now set amplitude and offset
 
     def program_manual_button(self, values):
         self._program_waveform(values)
