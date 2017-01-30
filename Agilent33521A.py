@@ -259,7 +259,7 @@ class Agilent33521AWorker(Worker):
         scale =1/2*(max_ramp - min_ramp)
         off = (min_ramp + scale)/2
         self.inst.write(u'VOLT {:.3f}'.format(scale))
-        self.inst.write(u'VOLT:OFF {:.3f}'.format(off))
+        self.inst.write(u'VOLT:OFFS {:.3f}'.format(off))
         #write out waveform
         data_string = ''.join(',' + '{:.3f}'.format(i) for i in ramp)
         self.inst.write(u'DATA:VOL:CLEAR')
