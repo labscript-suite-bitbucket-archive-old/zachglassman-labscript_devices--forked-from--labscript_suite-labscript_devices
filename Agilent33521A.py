@@ -145,7 +145,8 @@ class OldRamp(RampFunction):
             ramp_start,
             ramp_value,
             ramp_dur,
-            final_extent):
+            final_extent,
+            tweak):
         try:
             return ramp_func(t,
                 initial_value,
@@ -176,7 +177,7 @@ class Agilent33521ATab(DeviceTab):
         self.base_min = -5
         self.base_step = 0.01
         self.base_max = 12
-        self.base_decimals = 3
+        self.base_decimals = 4
         self.device = self.settings['connection_table'].find_by_name(self.device_name)
         self.ramp = OldRamp()
         ao_prop = {}
@@ -256,15 +257,21 @@ class Agilent33521AWorker(Worker):
         ramp = self.ramp.func(t, **values)
         min_ramp = np.min(ramp)
         max_ramp = np.max(ramp)
-        scale =1/2*(max_ramp - min_ramp)
-        off = (min_ramp + scale)/2
-        self.inst.write(u'VOLT {:.3f}'.format(scale))
-        self.inst.write(u'VOLT:OFFS {:.3f}'.format(off))
+        #scale data from -1 to 1
+        scale = 0.5*(max_ramp - min_ramp)
+        off = (min_ramp + scale)/2.0
+        ramp = (ramp - (scale + min_ramp))/scale
+        tweak = values['tweak']
         #write out waveform
-        data_string = ''.join(',' + '{:.3f}'.format(i) for i in ramp)
+        data_string = ''.join(',' + '{:.5f}'.format(i) for i in ramp)
         self.inst.write(u'DATA:VOL:CLEAR')
         self.inst.write(u'DATA:ARB DIP' + data_string)
         self.inst.write(u'FUNC:ARB DIP')
+        self.inst.write(u'SOUR1:VOLT {:.8f} VPP'.format(scale))
+        self.inst.write(u'SOUR1:VOLT:OFFS {:.8f}'.format(off + scale*tweak))
+        self.inst.write(u'BURS:PHAS .5')
+        self.inst.write(u'BURS:INT:PER 1000')
+
         #now set amplitude and offset
 
     def program_manual_button(self, values):
