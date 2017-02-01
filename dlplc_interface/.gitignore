@@ -1,0 +1,4 @@
+*.swp
+*~
+patterns2/*
+*.pyc

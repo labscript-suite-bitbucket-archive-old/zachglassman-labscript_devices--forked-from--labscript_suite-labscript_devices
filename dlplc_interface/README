@@ -1,0 +1,57 @@
+Quick Start:
+============
+
+$ python lightcrafter.py --help
+
+dlplc_tcp.py
+	Contains the tcp interface to the DLP LightCrafter.
+
+lightcrafter.py
+	Commandline interface to make the most common commands
+	avalible.
+
+square2diamond.py
+	Script to convert image with square pixels to one with
+	diamond pixels.
+
+
+Schrit für Schritt:
+===================
+
+Installation:
+-------------
+
+Die Python-Skripte (zusammen mit dem "patterns" Ordner) werden
+in ein beliebiges Verzeichnis kopiert. Damit die Skripte aus-
+geführt werden können, muss auch Python (Version 2.x) installiert
+sein.
+
+Inberiebnahme:
+--------------
+
+1.	Montiere den DLP3000 auf den LightCrafter.
+
+2.	Schliesse den LightCrafter an der Stromversorgung (Netzteil) an.
+	Auf dem DLP3000 wird ein Startbild angezeigt.
+
+3.	Verbinde den LightCrafter über ein USB-Kabel mit dem PC. Das
+	Betriebssystem sollte eine Nachricht über eine neue Netzwerk-
+	verbindung anzeigen.
+
+4.	Warte etwa 10 Sekunden.
+
+5. 	Wechsle in das Verzeichnis mit den Python-Skripten und führe
+	den Befehl
+		python lightcrafter.py --version
+	in einem Terminal (bzw. Eingabeaufforderung) aus.
+
+6.	Die Version des LightCrafters wird sofort angezeigt. Falls nicht,
+	kann es sein, dass die Verbindung noch nicht aufgebaut wurde und
+	es sollte noch etwas länger gewartet werden.
+
+7.	Um den DLP3000 zu testen, führe den Befehl
+		python lightcrafter.py sequence -i "patterns/number"
+	aus. Es sollte eine Abfolge von Zahlen auf dem DLP3000 zu sehen
+	sein. Entsprechend kann auch das Wellenmuster angezeigt werden:
+		python lightcrafter.py sequence -i "patterns/wave"
+
