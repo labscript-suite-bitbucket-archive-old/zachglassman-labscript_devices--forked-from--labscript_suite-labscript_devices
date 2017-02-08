@@ -46,14 +46,17 @@ class DMDFunction(object):
         pass
     def func_names(self):
         args  = inspect.getargspec(self.func)[0]
-        return sorted(args)
+        return sorted([i for i in args if i != 'inverse'])
 
-def draw_circle(x0, y0, radius):
+def draw_circle(x0, y0, radius, inverse = False):
     x, y = np.mgrid[:684,:608]
-    circle = (x-x0)**2 + (y-y0)**2 < radius**2
-    ans = np.ones((684, 608))
+    circle = ((x-x0)/1.75)**2 + (y-y0)**2 < radius**2
+    ans = np.ones((684,608))
     ans[circle] = 0
-    return ans
+    if not inverse:
+        return ans
+    if inverse:
+        return np.abs(ans-1)
 
 class CircleFunction(DMDFunction):
     def __init__(self):

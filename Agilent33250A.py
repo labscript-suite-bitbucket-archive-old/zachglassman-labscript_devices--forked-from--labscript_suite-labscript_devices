@@ -93,6 +93,7 @@ class Agilent33250AWorker(Worker):
         if val < 80e6 and val > 0:
             self.inst.write(u'APPL:sin {0}, 1,0'.format(val))
         #return self.check_remote_values()
+        self.inst.write(u'FM:STAT ON')
 
 
 
