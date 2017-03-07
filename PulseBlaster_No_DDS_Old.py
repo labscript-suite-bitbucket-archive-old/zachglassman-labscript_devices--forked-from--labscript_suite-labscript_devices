@@ -237,7 +237,7 @@ class PulseblasterNoDDSOldWorker(Worker):
         global h5py; import labscript_utils.h5_lock, h5py
         global zprocess; import zprocess
         #set reasonalbe total time
-        self._total_time = 20
+        self._total_time = 25
         self.pb_start = pb_start
         self.pb_stop = pb_stop
         self.pb_reset = pb_reset
@@ -302,6 +302,7 @@ class PulseblasterNoDDSOldWorker(Worker):
         return {}
 
     def start_run(self):
+
         if self.programming_scheme == 'pb_start/BRANCH':
             pb_start()
         elif self.programming_scheme == 'pb_stop_programming/STOP':

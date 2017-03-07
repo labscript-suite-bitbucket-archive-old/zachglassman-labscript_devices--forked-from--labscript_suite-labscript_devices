@@ -46,16 +46,16 @@ class DMDFunction(object):
         pass
     def func_names(self):
         args  = inspect.getargspec(self.func)[0]
-        return sorted([i for i in args if i != 'inverse'])
+        return sorted(args)
 
-def draw_circle(x0, y0, radius, inverse = False):
+def draw_circle(x0, y0, radius, inverse = 0):
     x, y = np.mgrid[:684,:608]
     circle = ((x-x0)/1.75)**2 + (y-y0)**2 < radius**2
     ans = np.ones((684,608))
     ans[circle] = 0
-    if not inverse:
+    if inverse < 1 or False:
         return ans
-    if inverse:
+    if inverse >= 1 or True:
         return np.abs(ans-1)
 
 class CircleFunction(DMDFunction):
@@ -132,6 +132,7 @@ class DLP_LightCrafterWorker(Worker):
         global visa; import visa
         global h5py; import labscript_utils.h5_lock, h5py
         global display_bitmap; from dlplc_interface.lightcrafter import display_bitmap
+        global display_sequence; from dlplc_interface.lightcrafter import display_sequence
         global imsave; from scipy.misc import imsave
 
         self.func = CircleFunction()
@@ -143,6 +144,19 @@ class DLP_LightCrafterWorker(Worker):
         save_path = r'C:\Users\spinorbec\Documents\DMDTESTING\todmd.bmp'
         imsave(save_path, image)
         success = display_bitmap(save_path)
+
+    def _program_multiple_images(self, values):
+        """program multiple images"""
+        save_path = r'C:\Users\spinorbec\Documents\DMDTESTING\todmd'
+        image = self.func.func(**values)
+        imsave(save_path + '01.bmp', image)
+        values['radius'] = 0
+        image = self.func.func(**values)
+        image[0,0] = 0
+        imsave(save_path + '00.bmp', image)
+        imsave(save_path + '02.bmp', image)
+        settings = {"trigger":2, 'period':0,'exposure':0,'include_inverted':0}
+        success = display_sequence(save_path, settings)
 
     def program_manual_button(self, values):
         self._program_image(values)
@@ -156,10 +170,15 @@ class DLP_LightCrafterWorker(Worker):
     def transition_to_buffered(self,device_name,h5file,initial_values,fresh):
         """get values from file and reprogram device
         if not same as initial values """
+        # KLUGE SO WE DON"T HAVE TO DISCONNECT
+        return initial_values
         with h5py.File(h5file, 'r') as f:
             attrs = dict(f['globals'].attrs)
         values = {k:float(v) for k,v in attrs.iteritems() if k in initial_values.keys()}
-        if values != initial_values or fresh:
+        #need to reprogram probably always if we are doing multiple devices
+        if attrs['switch_darkspot']:
+            self._program_multiple_images(values)
+        elif values != initial_values or fresh:
             #program here
             self._program_image(values)
 

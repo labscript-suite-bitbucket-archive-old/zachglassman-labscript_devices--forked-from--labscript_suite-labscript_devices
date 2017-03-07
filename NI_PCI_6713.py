@@ -11,14 +11,14 @@
 #                                                                   #
 #####################################################################
 
-from labscript import LabscriptError, AnalogOut
+from labscript import LabscriptError, AnalogOut, IntermediateDevice, config
 from labscript_devices import labscript_device, BLACS_tab, BLACS_worker, runviewer_parser
 import labscript_devices.NIBoard as parent
 
 import numpy as np
 import labscript_utils.h5_lock, h5py
 import labscript_utils.properties
-
+from random import randint
 @labscript_device
 class NI_PCI_6713(parent.NIBoard):
     description = 'NI-PCI-6713'
@@ -28,14 +28,103 @@ class NI_PCI_6713(parent.NIBoard):
     clock_limit = 500e3
     digital_dtype = np.uint8
 
+    def _generate_code(self, hdf5_file):
+        IntermediateDevice.generate_code(self, hdf5_file)
+        analogs = {}
+        digitals = {}
+        inputs = {}
+        for device in self.child_devices:
+            if isinstance(device,AnalogOut):
+                analogs[device.connection] = device
+            elif isinstance(device,DigitalOut):
+                digitals[device.connection] = device
+            elif isinstance(device,AnalogIn):
+                inputs[device.connection] = device
+            else:
+                raise Exception('Got unexpected device.')
+
+        clockline = self.parent_device
+        pseudoclock = clockline.parent_device
+        times = pseudoclock.times[clockline]
+
+        analog_connections = analogs.keys()
+        analog_connections.sort()
+        analog_out_attrs = []
+        #KLUGGEEEE
+        #get lenth of one output connection
+        output_length = len(analogs[analog_connections[0]].raw_output)
+        analog_out_table = np.empty((output_length,len(analogs)), dtype=np.float32)
+        #analog_out_table = np.empty((len(times),len(analogs)), dtype=np.float32)
+        for i, connection in enumerate(analog_connections):
+            output = analogs[connection]
+            if any(output.raw_output > 10 )  or any(output.raw_output < -10 ):
+                # Bounds checking:
+                raise LabscriptError('%s %s '%(output.description, output.name) +
+                                  'can only have values between -10 and 10 Volts, ' +
+                                  'the limit imposed by %s.'%self.name)
+            analog_out_table[:,i] = output.raw_output
+            analog_out_attrs.append(self.MAX_name +'/'+connection)
+        """
+        if self.name == 'ni_card_B':
+            #kluge to double every cell
+            new_out_table = np.empty((output_length*2, len(analogs)), dtype=np.float32)
+            for i, row in enumerate(analog_out_table):
+                new_out_table[2*i] = row
+                new_out_table[2*i+1] = row
+            analog_out_table = new_out_table
+        """
+        #now we know that the last column should be randomized for one of the
+        #CHOOSE CHANNEL HERE
+        if self.name == 'ni_card_B':
+            random_column = 0 #randint(0,6)
+        else:
+            # CHANGE THIS FOR CARD A
+            random_column = 1
+
+        #analog_out_table[:,-1] = analog_out_table[:,random_column]
+        input_connections = inputs.keys()
+        input_connections.sort()
+        input_attrs = []
+        acquisitions = []
+        for connection in input_connections:
+            input_attrs.append(self.MAX_name+'/'+connection)
+            for acq in inputs[connection].acquisitions:
+                acquisitions.append((connection,acq['label'],acq['start_time'],acq['end_time'],acq['wait_label'],acq['scale_factor'],acq['units']))
+        # The 'a256' dtype below limits the string fields to 256
+        # characters. Can't imagine this would be an issue, but to not
+        # specify the string length (using dtype=str) causes the strings
+        # to all come out empty.
+        acquisitions_table_dtypes = [('connection','a256'), ('label','a256'), ('start',float),
+                                     ('stop',float), ('wait label','a256'),('scale factor',float), ('units','a256')]
+        acquisition_table= np.empty(len(acquisitions), dtype=acquisitions_table_dtypes)
+        for i, acq in enumerate(acquisitions):
+            acquisition_table[i] = acq
+        digital_out_table = []
+        if digitals:
+            digital_out_table = self.convert_bools_to_bytes(digitals.values())
+        grp = self.init_device_group(hdf5_file)
+        if all(analog_out_table.shape): # Both dimensions must be nonzero
+            grp.create_dataset('ANALOG_OUTS',compression=config.compression,data=analog_out_table)
+            self.set_property('analog_out_channels', ', '.join(analog_out_attrs), location='device_properties')
+        if len(digital_out_table): # Table must be non empty
+            grp.create_dataset('DIGITAL_OUTS',compression=config.compression,data=digital_out_table)
+            self.set_property('digital_lines', '/'.join((self.MAX_name,'port0','line0:%d'%(self.n_digitals-1))), location='device_properties')
+        if len(acquisition_table): # Table must be non empty
+            grp.create_dataset('ACQUISITIONS',compression=config.compression,data=acquisition_table)
+            self.set_property('analog_in_channels', ', '.join(input_attrs), location='device_properties')
+        # TODO: move this to decorator (requires ability to set positional args with @set_passed_properties)
+        self.set_property('clock_terminal', self.clock_terminal, location='connection_table_properties')
+
     def generate_code(self, hdf5_file):
-        parent.NIBoard.generate_code(self, hdf5_file)
+        #parent.NIBoard.generate_code(self, hdf5_file)
+        self._generate_code(hdf5_file)
 
         # count the number of analog outputs in use
         analog_count = 0
         for child in self.child_devices:
             if isinstance(child,AnalogOut):
                 analog_count += 1
+
 
         # Check that there is a multiple of two outputs
         if analog_count % 2:
